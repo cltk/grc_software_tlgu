@@ -1,11 +1,18 @@
-# Name
+# About
+
+This application was written Dimitri Marinakis. It is hosted here to allow for better integration with the CLTK.
+
+[Project homepage](http://tlgu.carmen.gr/).
+
+# Manual
+## Name
 tlgu − convert beta code TLG and PHI CD-ROM txt files to Unicode
 
-# Synopsis
+## Synopsis
 tlgu [ options ] input_file [ output_file ]
 
 
-# Description
+## Description
 tlgu will convert an input_file from Thesaurus Linguae Graeca (TLG) and Packard Humanities Institute (PHI) representation to a Unicode (UTF-8) output_file. If output_file is not specified, the Unicode text is directed to standard output. The TLG/PHI representation consists of beta-code text and citation information.
 OPTIONS
 
@@ -118,7 +125,7 @@ block processing information is output (verbose).
 each work (book) is output as a separate file in the form output_file-xxx.txt; if an output file is not specified, this option has no effect.
 
 
-# History and intended use
+## History and intended use
 The purpose of tlgu is to translate binary TLG/PHI-format files into readable and editable text. It is based on an earlier program written in 80x86 assembly language (1996) outputting codes for a home-made font which used the prevalent hellenic font encodings of that time complemented by dead accent characters - not very attractive, but readable.
 
 Then came Unicode and a plethora of accented character glyphs; Polytonic fonts are already available (Cardo, Gentium, Athena, Athenian, Porson); new fonts are being created and older fonts are being expanded as special-use code points are included in the Unicode definition (musical symbols, other special symbols). A notable effort since this note was originally drafted is that of the Greek Font Society, now featuring a great, and expanding, selection of open polytonic fonts.
@@ -133,7 +140,7 @@ October 2011 - stdout is used if output_file is not specified.
 
 November 2011 - citations (v, w, x) at the start of section changes (e-book option)
 
-# Examples
+## Examples
 ./tlgu -r DOCCAN2.TXT doccanu.txt Translate the TLG canon to a unicode text file. Note the use of the -r option (this file expects Roman as the default font).
 
 
@@ -178,7 +185,7 @@ Will generate a file with citation description (A, B, D, Z) and citation referen
 
 will produce a compact version of the Gaius Iulius Caesar texts with v and x citations printed as they change; similarly, ./tlgu -r -N -Y LAT2150.TXT LAT2150.yy.TXT will produce a compact version of Zeno’s texts.
 
-# Post-processing examples
+## Post-processing examples
 I use the OpenOffice/LibreOffice suite for most of my work. This example shows one of many possible ways of using the search and replace facility to create a readable version of the Suda lexicon.
 
 
@@ -226,7 +233,7 @@ setxkbmap us,el ,polytonic -option grp:ctrl_shift_toggle -option grp_led:scroll
 
 This way multi-lingual text can be entered; keyboard layout switching is done by pressing Ctrl/Shift; alternate keyboard layout is indicated by the Scroll Lock light on the keyboard.
 
-# Further development
+## Further development
 You may not like the character output for a specific code. Check out the tlgcodes.h file containing the special symbol and punctuation codes and select one to suit you better. It will probably be a while before the beta to Unicode correspondence settles down.
 
 Drop me a line, if you need a new feature; let me know if you do find an interesting applications that others can profit from.
@@ -242,7 +249,7 @@ The OpenOffice/Libreoffice suite in its various editions (www.openoffice.org - a
 Greek Font Society: www.greekfontsociety.gr
 
 
-# Copyright
+## Copyright
 Copyright (C) 2004, 2005, 2011 Dimitri Marinakis (dm, ssa gr).
 
 This file is part of tlgu which is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License (version 2) as published by the Free Software Foundation.
