@@ -1,0 +1,12 @@
+# makedocs
+# Generates .html .ps .pdf files from a man page (requires (man), groff, ps2pdf)
+# e.g. makedocs tlgu.1 will produce tlgu.1.html, tlgu.1.ps, tlgu.1.pdf
+# 20-Aug-2005
+# 02-Oct-2011 replaced man invocation by groff
+if (test -z $1); then
+  echo Usage: makedocs MAN_PAGE_\(GROFF\)_FILE
+else
+  groff -T html -man $1 > $1.html
+  groff -T ps   -man $1 > $1.ps
+  ps2pdf $1.ps $1.pdf
+fi
