@@ -216,7 +216,7 @@ void usage_info(void)
 	printf("\n");
 }
 
-main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
 	unsigned char ucc;	/* test variable */
 	int idx;
