@@ -1,4 +1,4 @@
-.\" Copyright (C) 2004, 2005, 2011  Dimitri Marinakis (dm, ssa gr).
+.\" Copyright (C) 2004, 2005, 2011, 2013, 2020  Dimitri Marinakis (dm, ssa gr).
 .\"
 .\" This file is part of tlgu which is free software; you can redistribute it and/or modify
 .\" it under the terms of the GNU General Public License (version 2)
@@ -14,18 +14,19 @@
 .\" Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 .\" Boston, MA 02110-1301 USA.
 .\"
-.TH tlgu 1 "27-Nov-2011" "Version 1.6" "TLG to Unicode Converter"
+.TH tlgu 1 "15-May-2020" "Version 1.8" "TLG to Unicode Converter"
 .SH NAME
 
-tlgu \- convert beta code TLG and PHI CD-ROM txt files to Unicode
+.B tlgu 
+\- convert beta code TLG and PHI CD-ROM txt files to Unicode
 
 .SH SYNOPSIS
 .B tlgu
 [
 .I options
-]
+] [
 .I input_file
-[
+] [
 .I output_file
 ]
 
@@ -33,6 +34,7 @@ tlgu \- convert beta code TLG and PHI CD-ROM txt files to Unicode
 .B tlgu
 will convert an \fIinput_file\fP from Thesaurus Linguae Graeca (TLG) and Packard Humanities Institute (PHI) representation
 to a Unicode (UTF-8) \fIoutput_file\fP.
+If \fIinput_file\fP is not specified, standard input will be read.
 If \fIoutput_file\fP is not specified, the Unicode text is directed to standard output.
 The TLG/PHI representation consists of \fBbeta-code\fP text and \fBcitation\fP information.
 
@@ -101,6 +103,9 @@ special code debug information is output.
 .B \-V
 block processing information is output (verbose).
 .TP
+.B \-U
+vowels with acute accent are output using the Unicode 0x0370 codes rather than the 0x1F00 ones for compatibility with most current (as of 2020) keyboard encoders. 
+.TP
 .B \-W
 each work (book) is output as a separate file in the form output_file-xxx.txt;
 if an output file is not specified, this option has no effect.
@@ -132,6 +137,10 @@ April 2006 - Final sigma will now be output at end-of-line (!) from free-form in
 October 2011 - stdout is used if output_file is not specified.
 .sp 1
 November 2011 - citations (v, w, x) at the start of section changes (e-book option)
+.sp 1
+May 2012 -  Nick White (nick white, durham ac uk) revised the input arguments to use tlgu as a filter; stdin is used if input_file is not specified
+.sp 1
+May 2020 - Alternate output codes for vowels with acute accent (-U option)
 .SH EXAMPLES
 .B ./tlgu -r DOCCAN2.TXT doccanu.txt
 Translate the TLG canon to a unicode text file. Note the use of the \fB-r\fP option (this file
@@ -204,7 +213,7 @@ If you are using your wordprocessor with a locale setting other than Hellenic (e
 invocation with the desired character classification may prove useful for the occasional polytonic editing:
 .br
 .sp 1
-\fBLC_CTYPE=el_GR.UTF-8 /usr/bin/soffice\fP (or\fB/opt/libreoffice3.4/program/soffice\fP ).
+\fBLC_CTYPE=el_GR.UTF-8 /usr/bin/soffice\fP (or \fB/opt/libreoffice3.4/program/soffice\fP ).
 .br
 .sp 1
 I put my default locale and keyboard definitions in my \fB.bashrc\fP or \fB.profile\fP: 
@@ -245,7 +254,7 @@ includes a word processor that you can use to load, process and create new polyt
 Greek Font Society: \fBwww.greekfontsociety.gr\fP
 
 .SH COPYRIGHT
-Copyright (C) 2004, 2005, 2011 Dimitri Marinakis (dm, ssa gr).
+Copyright (C) 2004, 2005, 2011, 2013, 2020 Dimitri Marinakis (dm, ssa gr).
 
 This file is part of tlgu which is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License (version 2) as published by
