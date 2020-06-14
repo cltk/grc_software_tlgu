@@ -1,6 +1,6 @@
 /* tlgu: Translates TLG (D) / PHI text files to Unicode text
  *
- * Copyright (C) 2004, 2005, 2011 Dimitri Marinakis
+ * Copyright (C) 2004, 2005, 2011, 2013, 2020 Dimitri Marinakis
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License Version 2
@@ -16,7 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  * Usage:
- *	 tlgu [options] tlgu beta_code_file [unicode_text_file]
+ *	 tlgu [options] [beta_code_file] [unicode_text_file]
  *
  * Options:
  *	-r -- primarily Roman text (e.g. Canon, PHI); default betastate = ROMAN, reset on every ID code
@@ -49,7 +49,7 @@
  * years ago to translate Hellenic texts distributed on the TLG CD-ROM from
  * "beta code" to something readable, editable and printable.
  *
- * Contributors: Troy Griffitts (tg)
+ * Contributors: Troy Griffitts (tg), Nick White (nw)
  *
  * Pointers / References:
  *   TLG Project - www.tlg.uci.edu
@@ -69,6 +69,10 @@
  * 16-Oct-2011 dm -- Code correction for lower case phi
  * 20-Nov-2011 dm -- stop processing gracefully when writing to stdout
  * 20-Nov-2011 dm -- e-book type citations (options -X -Y)
+ * 01-May-2012 nw -- reading from stdin
+ * 17-Mar-2013 dm -- minor error handling corrections
+ * 15-May-2020 dm -- vowels with acute accent may be output with U0370 codes (option -U), additional code points
+ * 18-May-2020 dm -- rudimentary quasi bracket handling
  * 
  */
 
@@ -78,6 +82,7 @@
 /****************** PROTOTYPES FROM THE TOP DOWN *******************/
 
 int tlgu (char * input_file, char * output_file);
+void output_utf2(int ucode);
 void output_utf(int ucode);
 void output_string(char *outstr);
 int process_beta (int input_count);
@@ -87,7 +92,7 @@ void store_accents(unsigned char bufferchar);
 const char *resolve_cite_format(const char *cformat);
 
 /****************** PROGRAM VERSION INFORMATION  *******************/
-char *prog_version="1.6";
+char *prog_version="1.8.2";
 
 /****************** COMMAND LINE OPTIONS  **************************/
 int opt_roman = 0;
@@ -115,6 +120,7 @@ int opt_multiple = 0;
 int opt_ebook_cit_x = 0;
 int opt_ebook_cit_y = 0;
 int opt_nospace = 0;
+int opt_U370 = 0;
 
 /****************** GLOBAL VARIABLES *******************************/
 
@@ -189,12 +195,12 @@ int id_process;	/* if non-zero, command must be processed */
 void usage_info(void)
 {
 	printf("\ntlgu: TLG/PHI beta code file to Unicode translator ver. %s\n", prog_version);
-	printf("\ntlgu: Copyright (C) 2004, 2005, 2011 Dimitri Marinakis");
+	printf("\ntlgu: Copyright (C) 2004, 2005, 2011, 2013, 2020 Dimitri Marinakis");
 	printf("\ntlgu: This program is free software; you are encouraged to redistribute it under");
 	printf("\ntlgu: the terms of the GNU General Public License (version 2).\n");
 	printf("\ntlgu: This program comes with ABSOLUTELY NO WARRANTY. See the GNU General Public");
 	printf("\ntlgu: License in the file named `COPYING' for more details.\n");
-	printf("\ntlgu: Syntax: [-options...] tlgu beta_code_file [unicode_text_file]\n");
+	printf("\ntlgu: Syntax: tlgu [options] [beta_code_file] [unicode_text_file]\n");
 	printf("\ntlgu: -r -- primarily Roman text (e.g. Canon, PHI); default betastate = ROMAN, reset on every ID code");
 	printf("\ntlgu: -v -w -x -y -z -- work reference citations are printed in the form xxx.xxx...xxx");
 	printf("\ntlgu: -Z <custom_citation_format_prefix> -- use reference and description citation codes in string");
@@ -211,12 +217,13 @@ void usage_info(void)
 	printf("\n");
 	printf("\ntlgu: -C -- citation debug information is printed");
 	printf("\ntlgu: -S -- special code debug information is printed");
- 	printf("\ntlgu: -V -- processing debug information is printed");
+	printf("\ntlgu: -V -- processing debug information is printed");
+	printf("\ntlgu: -U -- output acute accents as tonoi in the Greek and Coptic Unicode block (U+0370 ff.)");
 	printf("\ntlgu: -W -- multiple output files, one for each work (book); output filename must be specified");
 	printf("\n");
 }
 
-main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
 	unsigned char ucc;	/* test variable */
 	int idx;
@@ -226,16 +233,11 @@ main(int argc, char * argv[])
 		exit(1);
 	}
 
-	if (argc < 2) {
-		usage_info();
-		exit(1);
-	}
-
-	--argc ;
-	++argv ;
-
-	while(argc > 1 && argv[0][0] == '-') {
-		switch(argv[0][1]) {
+	while(argc > 1 && argv[1][0] == '-') {
+		switch(argv[1][1]) {
+			case 'U':
+				opt_U370 = 1;
+				break;
 			case 'N':
 				opt_nospace = 1;
 				break;
@@ -321,11 +323,18 @@ main(int argc, char * argv[])
 	argc-- ;
 	argv++ ;
 	}
-	if (argc < 2) {
-		return tlgu(argv[0], "");
-	} else {
-		return tlgu(argv[0], argv[1]);
-	}
+
+	switch(argc) {
+		case 1:
+			return tlgu("", "");
+			break;
+		case 2:
+			return tlgu(argv[1], "");
+			break;
+		default:
+			return tlgu(argv[1], argv[2]);
+ 	}
+
 }
 
 
@@ -350,9 +359,15 @@ int tlgu(char *input_file, char *output_file)
 	
 	/* Open input and output files
 	 */
-	infile = open(input_file, O_RDONLY);
+// 	infile = open(input_file, O_RDONLY);
+	if (strlen(input_file) == 0) {
+		infile = STDIN_FILENO;
+	} else {
+		infile = open(input_file, O_RDONLY);
+	}
+
 	if (infile < 0) {
-		perror("\ntlgu input file open");
+		perror("\ntlgu: input file open");
 		return(1);
 	} else {
 		if (strlen(output_file) == 0) {
@@ -361,13 +376,13 @@ int tlgu(char *input_file, char *output_file)
 			if (strlen(output_file) < MAXFILELEN-5) {
 				strcpy(new_file, output_file);
 			} else {
-				printf("\ntlgu output filename too long - exiting\n");
+				printf("\ntlgu: output filename too long - exiting\n");
 				return(1);
 			}
 			outfile = open(new_file, O_WRONLY | O_CREAT | O_TRUNC);
 		}
 		if (outfile < 0) {
-			perror("\ntlgu output file create");
+			perror("\ntlgu: output file create");
 			close(infile);
 			return(1);
 		}
@@ -625,7 +640,7 @@ int process_beta (int input_count)
 	return return_code;
 }
 /****************** LIBRARY FUNCTIONS ******************************/
-/* get_acents:
+/* get_accents:
  * gets accents in <accents>
  * Returns: number of accents found or zero
  * Changes: accents, iptr
@@ -672,6 +687,8 @@ int get_accents(void)
  * -----------  1 ypogegrammeni
  * Changes: accents
  * Caveat: currently only ORs new accent... expects an all-zero accent variable
+ * 
+ * 15-May-2020 dm -- single acute accent option (Unicode U0370 code block)
  */
 void store_accents(unsigned char bufferchar)
 {
@@ -702,6 +719,25 @@ void store_accents(unsigned char bufferchar)
 			break;
 	}
 	accents &= 0x1f;
+}
+
+/* mod_accents:
+ * 
+ * Part of the U0370 character output option:
+ * 
+ * If accents are acute, diaeresis (dialytica) or a combination of the two
+ * <accents> which is used as an index to the accented character tables is
+ * modified for pointing to the alternate character
+ * 
+ * Changes: accents
+ * 
+ * 15-May 2020 dm
+ */
+void mod_accents(void)
+{
+    if (accents == 8) accents = 0x20;
+    else if (accents == 3) accents = 0x21;
+    else if (accents == 11) accents = 0x22;
 }
 
 /* output_accents:
@@ -779,6 +815,36 @@ void output_accents(void)
 	return convnumber;
 }
 
+/* output_utf2:
+ * Converts the input code into a UTF-8 byte sequence in output_buffer
+ * Changes: optr, output_buffer
+ * NOTE: this is a duplicate of output_utf (in order to avoid recursion)
+ */
+void output_utf2(int ucode)
+{
+	if ((optr+3) > OUTRECSIZE) {
+		perror("\noptr out of range");
+	} else if (ucode == 0){
+		/* do nothing */
+	} else if (ucode < 0x80) {
+		output_buffer[optr++] = ucode;
+	} else if (ucode < 0x800) {
+		output_buffer[optr++] = (ucode >> 6) | 0xc0;
+		output_buffer[optr++] = (ucode & 0x3f) | 0x80;
+	} else if (ucode <= 0xffff) {
+		output_buffer[optr++] = ((ucode & 0xf000) >> 12) | 0xe0;
+		output_buffer[optr++] = ((ucode & 0x0fc0) >>  6) | 0x80;
+		output_buffer[optr++] = (ucode & 0x3f) | 0x80;
+	} else if (ucode <= 0x10ffff) {
+		output_buffer[optr++] = ((ucode & 0x1C0000) >> 18) | 0xF0;
+		output_buffer[optr++] = ((ucode & 0x03f000) >> 12) | 0x80;
+		output_buffer[optr++] = ((ucode & 0x000fc0) >>  6) | 0x80;
+		output_buffer[optr++] = (ucode & 0x3f) | 0x80;
+	} else {
+		/* higher codes are not defined for UTF-8*/
+	}
+}
+
 /* output_utf:
  * Converts the input code into a UTF-8 byte sequence in output_buffer
  * Changes: optr, output_buffer
@@ -798,9 +864,17 @@ void output_utf(int ucode)
 		output_buffer[optr++] = ((ucode & 0xf000) >> 12) | 0xe0;
 		output_buffer[optr++] = ((ucode & 0x0fc0) >>  6) | 0x80;
 		output_buffer[optr++] = (ucode & 0x3f) | 0x80;
+	} else if (ucode <= 0x10ffff) {
+		output_buffer[optr++] = ((ucode & 0x1C0000) >> 18) | 0xF0;
+		output_buffer[optr++] = ((ucode & 0x03f000) >> 12) | 0x80;
+		output_buffer[optr++] = ((ucode & 0x000fc0) >>  6) | 0x80;
+		output_buffer[optr++] = (ucode & 0x3f) | 0x80;
 	} else {
-		/* higher unicodes are ignored */
+		/* higher codes are not defined for UTF-8*/
 	}
+	
+	/* Output combining codes for brackets */
+	if (quasi_bracket_code) output_utf2(quasi_bracket_code);
 }
 
 /* output_string:
@@ -895,13 +969,22 @@ void handle_escape_codes(unsigned char beta, int number)
 		case '<':
 			if (opt_debug_bracket) printf("<%d -- %s %d.%d.%d\n", number, citation[1], icitation[23], icitation[24], icitation[25]);
 			if (number < MAX_QUASI_BRACKET) {
-				output_utf(quasi_bracket_open_symbol[number]);
+                if (number == 0 || number == 1 || number == 3 || number == 4 || number == 5 \
+                    || number == 8 || number == 17 || number == 18) {
+                    quasi_bracket_code = quasi_bracket_open_symbol[number];
+                } else {
+                    output_utf(quasi_bracket_open_symbol[number]);
+                }
 			}
 			break;
 		case '>':
 			if (opt_debug_bracket) printf(">%d -- %s %d.%d.%d\n", number, citation[1], icitation[23], icitation[24], icitation[25]);
 			if (number < MAX_QUASI_BRACKET) {
-				output_utf(quasi_bracket_close_symbol[number]);
+                if (quasi_bracket_code) {
+                    quasi_bracket_code = 0; /* stop outputting combining codes */
+                } else {
+                    output_utf(quasi_bracket_close_symbol[number]);
+                }
 			}
 			break;
 		case '{':
@@ -1007,6 +1090,7 @@ void beta_code(int input_count)
 					betachar = input_buffer[iptr++];
 					if (accents == 0) get_accents(); //FIXME: handle suffix accents differently
 					if (strchr(accented_chars, betachar)) {
+                        if (opt_U370) mod_accents();
 						switch (betachar) {
 							case 'A':
 								outputchar = Alpha[accents];
@@ -1053,6 +1137,7 @@ void beta_code(int input_count)
 					 */
 					if (strchr(accented_chars, betachar)) {
 						get_accents();
+                        if (opt_U370) mod_accents();
 						switch (betachar) {
 							case 'A':
 								outputchar = alpha[accents];
@@ -1104,6 +1189,8 @@ void beta_code(int input_count)
 				} else {
 					//FIXME: placeholder
 					if (betachar != '`') outputchar = betachar;
+					if (betachar == '_') outputchar = 0x2014; /* EM DASH */
+					if (betachar == ':') outputchar = 0x00b7; /* Ano teleia */
 					output_utf(outputchar);
 				}
 			}

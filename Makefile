@@ -29,7 +29,7 @@ cleaner: clean
 .c:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-$(TARGET): tlgu.c
+$(TARGET): tlgu.c tlgu.h tlgcodes.h
 	$(CC) -o $(TARGET) $(LDFLAGS) $(SOURCE)
 
 install: clean all
