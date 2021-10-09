@@ -1,6 +1,6 @@
 /* tlgu: Translates TLG (D) / PHI text files to Unicode text
  *
- * Copyright (C) 2004, 2005, 2011, 2013, 2020 Dimitri Marinakis
+ * Copyright (C) 2004, 2005, 2011, 2013, 2020, 2021 Dimitri Marinakis
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License Version 2
@@ -73,7 +73,7 @@
  * 17-Mar-2013 dm -- minor error handling corrections
  * 15-May-2020 dm -- vowels with acute accent may be output with U0370 codes (option -U), additional code points
  * 18-May-2020 dm -- rudimentary quasi bracket handling
- * 
+ * 27-Jul-2021 dm -- citation handling corrections
  */
 
 #include "tlgu.h"
@@ -92,7 +92,7 @@ void store_accents(unsigned char bufferchar);
 const char *resolve_cite_format(const char *cformat);
 
 /****************** PROGRAM VERSION INFORMATION  *******************/
-char *prog_version="1.8.2";
+char *prog_version="1.9";
 
 /****************** COMMAND LINE OPTIONS  **************************/
 int opt_roman = 0;
@@ -157,7 +157,7 @@ char previous_bcit[52][32];	/* holds previous work (book) citation */
 	descriptors, binary component -- a-z (1 to 16383)
 	descriptors, ascii component -- a-z (1 to 31 characters + null)
 
-	Citations ---
+	Citation data ---
 	a - author citation
 	b - work citation
 	c - preferred abbreviation for the work
@@ -175,15 +175,18 @@ char previous_bcit[52][32];	/* holds previous work (book) citation */
 	y - (verse) (book)
 	z - line
 
-	Descriptions ---
+	Descriptors ---
 
-	z - comment sequence number within a work
+	z - comment sequence number within a work (PHI)
 
 	In the common data structures below, citations will hold the first 26 positions (0-25)
 	while descriptors will hold the next 26 positions.
+	
+	The maximum number of characters in string citations is 31 (+ null byte)
 */
+#define MAX_CITATION 32
 int icitation[52];
-char citation[52][32];
+char citation[52][MAX_CITATION];
 int id_level;	/* holds translated current id level as an index to ID arrays */
 int id_char;	/* holds the pointer for the ascii part of the ID arrays */
 int id_command;	/* holds the current instruction for ID handling */
@@ -195,7 +198,7 @@ int id_process;	/* if non-zero, command must be processed */
 void usage_info(void)
 {
 	printf("\ntlgu: TLG/PHI beta code file to Unicode translator ver. %s\n", prog_version);
-	printf("\ntlgu: Copyright (C) 2004, 2005, 2011, 2013, 2020 Dimitri Marinakis");
+	printf("\ntlgu: Copyright (C) 2004, 2005, 2011, 2013, 2020, 2021 Dimitri Marinakis");
 	printf("\ntlgu: This program is free software; you are encouraged to redistribute it under");
 	printf("\ntlgu: the terms of the GNU General Public License (version 2).\n");
 	printf("\ntlgu: This program comes with ABSOLUTELY NO WARRANTY. See the GNU General Public");
@@ -391,9 +394,10 @@ int tlgu(char *input_file, char *output_file)
 	/* Initialize citation
 	 * and descriptor indicators
 	 */
+	id_level = 0;
 	for (i = 0; i < 52; i++) {
 		icitation[i] = 0;
-		for (j = 0; j < 32; j++) {
+		for (j = 0; j < MAX_CITATION; j++) {
 			citation[i][j]=0;
 		}
 	}
@@ -1262,7 +1266,7 @@ const char *resolve_cite_format(const char *cformat) {
 /* id_code:
  * <iptr> points to the next character in the <input_buffer> to process;
  * <optr> points to the next empty <output_buffer position.
- * Returns: 0 or -1 for EOF
+ * Returns: 0 or -1 for EOF, -2 for book change
  * 20-Nov-2011 dm -- citation output for e-book option
  */
 int id_code(int input_count)
@@ -1288,6 +1292,9 @@ int id_code(int input_count)
 				if (optr < OUTRECSIZE) {
 					id_process = 0; /* we don't have a command yet */
 					if (idchar >= 0xF0) {
+						/* 
+						 * Special code handling 
+						 */
 						switch (idchar)
 						{
 							case 0xF0:  /* EOF */
@@ -1305,16 +1312,20 @@ int id_code(int input_count)
 								if (opt_debug_cit) printf("tlgu: EOS %x\n ", iptr-1);
 								break;
 							case 0xF8:  /* Exception start */
-								if (opt_debug_cit) printf("tlgu: Exc start %x\n", iptr-1);
+								if (opt_debug_cit) printf("tlgu: Exception start %x\n", iptr-1);
+								/* FIXME: Output delimiter */
 								break;
 							case 0xF9:  /* Exception end */
-								if (opt_debug_cit) printf("tlgu: Exc end %x\n", iptr-1);
+								if (opt_debug_cit) printf("tlgu: Exception end %x\n", iptr-1);
+								/* FIXME: Output delimiter */
 								break;
 							default:
 								break;
 						}
 					} else if (idchar >= 0xE0) {
-						/* The byte following an escape code is an ID byte
+						/* 
+						 * Escape code handling
+						 * The byte following an escape code is an ID byte
 						 * Citation IDs can only be 0=a, 1=b, 2=c and 4=d
 						 */
 						if (opt_debug_cit) printf("tlgu: Escape %x", idchar);
@@ -1324,15 +1335,18 @@ int id_code(int input_count)
 							id_level = idchar - 97 + 26; /* create an index offset */
 							if (id_level > 51) {id_level = 51;} /* default to z */
 						} else {
-							id_level = idchar & 7;    /* must be 0 - 4 */
+							/* For escape codes, citation IDs can only be a=0, b=1, c=2 and d=4*/
+							id_level = idchar & 7;
 							if (id_level == 4) {id_level = 3;}    /* adjust d level */
 						}
 						if (opt_debug_cit) printf(" ID level: %d\n", id_level);
 						id_process = 1; /* command must be processed */
 					} else if ((idchar >= 0x80) && (id_process == 0)) {
 						id_command = idchar & 0xF;  /* get command first */
-						scratch = (idchar >> 4) & 0x7;    /* try to create an offset */
-						//printf(" %x %x ", idchar, scratch);
+						/* create a case number 0 to 5, corresponding to 0x8_ - 0xD_ */
+						scratch = (idchar >> 4) & 0x7;    
+						if (opt_debug_cit) printf("tlgu: IDchar %x case %x\n", idchar, scratch);
+
 						switch (scratch)
 						{
 							case 0:
@@ -1368,32 +1382,49 @@ int id_code(int input_count)
 						switch (id_command)
 						{
 							case 0:
-								icitation[id_level]++;  /* increment ID */
+								/* increment the last character of the ID string
+								 * at this level, if present, else increment
+								 * the numeric value
+								 */
+								scratch = strlen(citation[id_level]);
+								if (scratch > 0) {
+									citation[id_level][scratch-1]++;
+								} else {
+									icitation[id_level]++;  /* increment numeric ID */
+								}
 								break;
 							case 1:
 								icitation[id_level] = 1;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 2:
 								icitation[id_level] = 2;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 3:
 								icitation[id_level] = 3;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 4:
 								icitation[id_level] = 4;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 5:
 								icitation[id_level] = 5;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 6:
 								icitation[id_level] = 6;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 7:
 								icitation[id_level] = 7;  /* literal value */
+								citation[id_level][0] = 0x0;
 								break;
 							case 8:
 								idchar = input_buffer[iptr++];  /* 7 bit binary value */
 								icitation[id_level] = idchar & 0x7F;
+								citation[id_level][0] = 0x0;
 								break;
 							case 9:
 								idchar = input_buffer[iptr++];  /* 7 bit binary value */
@@ -1422,6 +1453,7 @@ int id_code(int input_count)
 								idchar &= 0x7F; /* mask sign bit */
 								scratch = scratch | idchar; /* combine */
 								icitation[id_level] = scratch;
+								citation[id_level][0] = 0x0;
 								break;
 							case 0xc:
 								idchar = input_buffer[iptr++];  /* 14 bit binary value */
@@ -1432,7 +1464,7 @@ int id_code(int input_count)
 								icitation[id_level] = scratch;
 								idchar = input_buffer[iptr++];  /* single character */
 								citation[id_level][0] = idchar & 0x7F;
-								citation[id_level][1] = 0; /* end of string */
+								citation[id_level][1] = 0x0; /* end of string */
 								break;
 							case 0xd:
 								idchar = input_buffer[iptr++];  /* 14 bit binary value */
@@ -1444,7 +1476,7 @@ int id_code(int input_count)
 								for (id_char=0; id_char < 31; id_char++) {
 									idchar = input_buffer[iptr++];  /* string */
 									if (idchar == 0xFF) {
-										citation[id_level][id_char] = 0;    /* end of string */
+										citation[id_level][id_char] = 0x0;    /* end of string */
 										break;
 									} else {
 										citation[id_level][id_char] = idchar & 0x7F;
@@ -1455,14 +1487,14 @@ int id_code(int input_count)
 								/* same binary value, single character */
 								idchar = input_buffer[iptr++];  /* single character */
 								citation[id_level][0] = idchar & 0x7F;
-								citation[id_level][1] = 0; /* end of string */
+								citation[id_level][1] = 0x0; /* end of string */
 								break;
 							case 0xf:
 								icitation[id_level] = 0;    /* no binary value */
 								for (id_char=0; id_char < 31; id_char++) {
 									idchar = input_buffer[iptr++];  /* string */
 									if (idchar == 0xFF) {
-										citation[id_level][id_char] = 0;    /* end of string */
+										citation[id_level][id_char] = 0x0;    /* end of string */
 										break;
 									} else {
 										citation[id_level][id_char] = idchar & 0x7F;
@@ -1493,17 +1525,62 @@ int id_code(int input_count)
 						if (opt_debug_cit) printf("tlgu: Command: %x ID level: %d, Binary: %d, ASCII: %s iptr++ %x\n",\
 						id_command, id_level,icitation[id_level], citation[id_level], iptr);
 
-						/* Adjust lower citation levels */
+						/* Adjust lower citation levels  - 
+						 */
 						switch (id_level)
 						{
+							/* a or b level changes;
+							 * lower citation levels are set to zero / null
+							 * descriptor ID levels are set to null
+							 */
+							case 0:
+							case 1:
+								icitation[13] = 0;
+								citation[13][0] = 0x0;
+								icitation[21] = 0;
+								citation[21][0] = 0x0;
+								icitation[22] = 0;
+								citation[22][0] = 0x0;
+								icitation[23] = 0;
+								citation[23][0] = 0x0;
+								icitation[24] = 0;
+								citation[24][0] = 0x0;
+								icitation[25] = 0;
+								citation[25][0] = 0x0;
+								for (scratch = 26; scratch < 52; scratch++) {
+									citation[scratch][0] = 0x0;
+								}
+								break;
+							case 13:
+								/* n level change;
+								 * set all other citation levels to zero / null 
+								 */
+								icitation[21] = 0;
+								citation[21][0] = 0x0;
+								icitation[22] = 0;
+								citation[22][0] = 0x0;
+								icitation[23] = 0;
+								citation[23][0] = 0x0;
+								icitation[24] = 0;
+								citation[24][0] = 0x0;
+								icitation[25] = 0;
+								citation[25][0] = 0x0;
+								break;
 							case 21:
+								/* v level and lower change; 
+								 * set lower citation levels to 1, null citation strings 
+								 */
 								icitation[22] = 1;
+								citation[22][0] = 0x0;
 							case 22:
 								icitation[23] = 1;
+								citation[23][0] = 0x0;
 							case 23:
 								icitation[24] = 1;
+								citation[24][0] = 0x0;
 							case 24:
 								icitation[25] = 1;
+								citation[25][0] = 0x0;
 							case 25:
 								outcode = 0;
 								break;
